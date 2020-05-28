@@ -1,18 +1,24 @@
 import os
 import pytest
-import shutil, tempfile
+import shutil
+import tempfile
 
 nbdir = os.path.join('notebooks')
 
 testdir = tempfile.mkdtemp()
 
+
 def get_notebooks():
-    return [f for f in os.listdir(nbdir) if f.endswith('.ipynb')]
+    ignore = ["testing_mp.ipynb"]
+    return [f for f in os.listdir(nbdir) if f.endswith('.ipynb')
+            and f not in ignore]
+
 
 def get_jupyter_kernel():
     try:
         jklcmd = ('jupyter', 'kernelspec', 'list')
-        b = subprocess.Popen(jklcmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).communicate()[0]
+        b = subprocess.Popen(jklcmd, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT).communicate()[0]
         if isinstance(b, bytes):
             b = b.decode('utf-8')
         print(b)
@@ -21,17 +27,18 @@ def get_jupyter_kernel():
                 kernel = line.split()[0]
     except:
         kernel = None
-    
-    return kernel    
+
+    return kernel
+
 
 @pytest.mark.parametrize("fn", get_notebooks())
 def test_notebook(fn):
-    
+
     kernel = get_jupyter_kernel()
     print('available jupyter kernel {}'.format(kernel))
 
     pth = os.path.join(nbdir, fn)
-    
+
     cmd = 'jupyter ' + 'nbconvert ' + \
           '--ExecutePreprocessor.timeout=600 ' + '--to ' + 'notebook ' + \
           '--execute ' + '{} '.format(pth) + \
