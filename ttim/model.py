@@ -409,6 +409,46 @@ class TimModel(PlotTtim):
         if sendback:
             return sol
         return
+
+    def solve_mp(self, printmat=0, sendback=0, silent=False):
+        """Compute solution
+        
+        """
+        
+        # Initialize elements
+        self.initialize()
+        # Compute number of equations
+        self.neq = np.sum([e.nunknowns for e in self.elementlist])
+        if silent is False:
+            print('self.neq ', self.neq)
+        if self.neq == 0:
+            if silent is False:
+                print('No unknowns. Solution complete')
+            return
+        mat = np.empty((self.neq, self.neq, self.npval), 'D')
+        rhs = np.empty((self.neq, self.ngvbc, self.npval), 'D')
+        ieq = 0
+        for e in self.elementlist:
+            if e.nunknowns > 0:
+                mat[ieq:ieq+e.nunknowns, :, :], rhs[ieq:ieq+e.nunknowns, :, :] = e.equation()
+                ieq += e.nunknowns
+        if printmat:
+            return mat, rhs
+        for i in range(self.npval):
+            sol = np.linalg.solve(mat[:, :, i], rhs[:, :, i])
+            icount = 0
+            for e in self.elementlist:
+                for j in range(e.nunknowns):
+                    e.parameters[:, j, i] = sol[icount, :]
+                    icount += 1
+                e.run_after_solve()
+        if silent is False:
+            print('solution complete')
+        elif (silent == 'dot') or (silent == '.'):
+            print('.', end='', flush=True)
+        if sendback:
+            return sol
+        return
     
     def storeinput(self,frame):
         self.inputargs, _, _, self.inputvalues = inspect.getargvalues(frame)
