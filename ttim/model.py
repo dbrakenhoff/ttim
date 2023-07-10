@@ -301,10 +301,11 @@ class TimModel(PlotTtim):
         for i in range(nx):
             h[:,:,i] = self.head(xg[i], yg[i], t, layers)
         return h
-    
-    def headgrid(self, xg, yg, t, layers=None, printrow=False):
+
+    def headgrid(self, xg, yg, t, layers=None, printrow=False,
+                 progressbar=False):
         """Grid of heads
-        
+
         Parameters
         ----------
         xg : array
@@ -317,18 +318,18 @@ class TimModel(PlotTtim):
             layers for which grid is returned
         printrow : boolean, optional
             prints dot to screen for each row of grid if set to `True`
-        
+
         Returns
         -------
         h : array size `nlayers, ntimes, ny, nx`
-        
+
         See also
         --------
-        
+
         :func:`~ttim.model.Model.headgrid2`
 
         """
-        
+        import tqdm
         nx = len(xg)
         ny = len(yg)
         if layers is None:
@@ -336,14 +337,79 @@ class TimModel(PlotTtim):
         else:
             nlayers = len(np.atleast_1d(layers))
         t = np.atleast_1d(t)
-        h = np.empty( (nlayers,len(t),ny,nx) )
-        for j in range(ny):
+        h = np.empty((nlayers, len(t), ny, nx))
+
+        for j in (tqdm.trange(ny, desc="Rows") if progressbar else range(ny)):
             if printrow:
                 print('.', end='', flush=True)
             for i in range(nx):
                 h[:, :, j, i] = self.head(xg[i], yg[j], t, layers)
         return h
-    
+
+    def headgrid_mp(self, xg, yg, t, layers=None, printrow=False,
+                    nproc=None, progressbar=False):
+        """Grid of heads
+
+        Parameters
+        ----------
+        xg : array
+            x values of grid
+        yg : array
+            y values of grid
+        t : list or array
+            times for which grid is returned
+        layers : integer, list or array, optional
+            layers for which grid is returned
+        printrow : boolean, optional
+            prints dot to screen for each row of grid if set to `True`
+
+        Returns
+        -------
+        h : array size `nlayers, ntimes, ny, nx`
+
+        See also
+        --------
+
+        :func:`~ttim.model.Model.headgrid2`
+
+        """
+        import multiprocessing as mp
+        import tqdm
+
+        nx = len(xg)
+        ny = len(yg)
+        if layers is None:
+            nlayers = self.aq.find_aquifer_data(xg[0], yg[0]).naq
+        else:
+            nlayers = len(np.atleast_1d(layers))
+        t = np.atleast_1d(t)
+        h = np.empty((nlayers, len(t), ny, nx))
+
+        # start multiprocessing
+        if nproc is None:
+            nproc = mp.cpu_count() - 1  # make no. of processes equal to 1 less than no. of cores
+
+        pool = mp.Pool(processes=nproc, maxtasksperchild=100)
+
+        results = []
+        locs = []
+        for j in range(ny):
+            for i in range(nx):
+                locs.append((i, j))
+                pool.apply_async(self.head, args=(xg[i], yg[j], t, layers),
+                                 callback=results.extend)
+
+        pool.close()
+        pool.join()
+
+        for p, (ix, iy) in (tqdm.tqdm(zip(results, locs), total=len(locs),
+                                      desc="Fill array")
+                            if progressbar else zip(results, locs)):
+            # hi = p.get()
+            h[:, :, iy, ix] = p
+            del p #, hi
+        return h
+
     def headgrid2(self, x1, x2, nx, y1, y2, ny, t, layers=None, printrow=False):
         """Grid of heads
         
